@@ -1,3 +1,4 @@
+
 import os
 
 from dotenv import load_dotenv
@@ -8,27 +9,48 @@ from sqlalchemy.orm import sessionmaker
 # Load environment variables
 load_dotenv()
 
-# Read database credentials
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_NAME = os.getenv("DB_NAME", "sharespace_db")
+# Check whether a hosted database URL is configured
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DB_PASSWORD:
-    raise ValueError("Database password is missing in the .env file")
+if DATABASE_URL:
+    # Use Neon or another hosted PostgreSQL database
+    # Explicitly use psycopg 3
+    if DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = DATABASE_URL.replace(
+            "postgresql://",
+            "postgresql+psycopg://",
+            1
+        )
+    elif DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace(
+            "postgres://",
+            "postgresql+psycopg://",
+            1
+        )
 
-# Create PostgreSQL connection URL
-DATABASE_URL = URL.create(
-    drivername="postgresql+psycopg",
-    username=DB_USER,
-    password=DB_PASSWORD,
-    host=DB_HOST,
-    port=DB_PORT,
-    database=DB_NAME
-)
+else:
+    # Use the existing local PostgreSQL database
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = int(os.getenv("DB_PORT", "5432"))
+    DB_NAME = os.getenv("DB_NAME", "sharespace_db")
 
-# Create SQLAlchemy engine
+    if not DB_USER or not DB_PASSWORD:
+        raise ValueError(
+            "Local database credentials are missing in the .env file"
+        )
+
+    DATABASE_URL = URL.create(
+        drivername="postgresql+psycopg",
+        username=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME
+    )
+
+# Create PostgreSQL engine
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True
