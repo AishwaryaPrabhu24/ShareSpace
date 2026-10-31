@@ -23,7 +23,7 @@ router = APIRouter(
 
 
 # 1. Add a new resource
-# Only Admin and Owner can create resources.
+# Only Owners can create resources.
 @router.post(
     "/",
     response_model=ResourceResponse,
@@ -33,7 +33,7 @@ def create_resource(
     resource_data: ResourceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(
-        require_roles("admin", "owner")
+        require_roles("owner")
     )
 ):
     new_resource = Resource(
@@ -59,16 +59,16 @@ def create_resource(
         }
     )
 
-    print("AUDIT LOG CREATED:", new_resource.id)
-
     db.commit()
     db.refresh(new_resource)
 
     return new_resource
 
 
-# 2. Get all resources with search and filters
-# All authenticated roles can view resources.
+# 2. Get resources with search and filters
+# Admin: View resources submitted by Owners only.
+# Owner: View all resources.
+# Seeker: View all resources for discovery.
 @router.get(
     "/",
     response_model=list[ResourceResponse]
@@ -84,6 +84,15 @@ def get_all_resources(
 ):
     query = select(Resource)
 
+    # Admin can view only resources belonging to Owners.
+    if current_user.role == "admin":
+        query = (
+            query
+            .join(User, Resource.owner_id == User.id)
+            .where(User.role == "owner")
+        )
+
+    # Search filter
     if search:
         search_term = f"%{search.strip()}%"
 
@@ -94,14 +103,16 @@ def get_all_resources(
             )
         )
 
+    # Category filter
     if category:
         query = query.where(
             Resource.category.ilike(category.strip())
         )
 
+    # Availability filter
     if available_only:
         query = query.where(
-            Resource.is_available == True
+            Resource.is_available.is_(True)
         )
 
     query = query.order_by(Resource.id.desc())
@@ -112,7 +123,7 @@ def get_all_resources(
 
 
 # 3. Get resources belonging to the logged-in Owner
-# Only Owner can access this endpoint.
+# Only Owners can access this endpoint.
 @router.get(
     "/my",
     response_model=list[ResourceResponse]
