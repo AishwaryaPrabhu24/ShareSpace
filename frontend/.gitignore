@@ -1,0 +1,69 @@
+# ==========================================
+# ENVIRONMENT VARIABLES AND SECRETS
+# ==========================================
+.env
+.env.*
+!.env.example
+
+backend/.env
+backend/.env.*
+
+frontend/.env
+frontend/.env.*
+
+# ==========================================
+# PYTHON
+# ==========================================
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+
+# ==========================================
+# NODE.JS AND REACT
+# ==========================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ==========================================
+# LOG FILES
+# ==========================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# EDITORS AND IDE
+# ==========================================
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ==========================================
+# OPERATING SYSTEM
+# ==========================================
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# TEST AND COVERAGE FILES
+# ==========================================
+.coverage.*
+coverage/
