@@ -1,4 +1,6 @@
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +24,8 @@ from app.routers import notifications
 from app.routers import analytics
 from app.routers import audit_logs
 from app.routers import users
+
+
 # Create missing database tables
 Base.metadata.create_all(bind=engine)
 
@@ -47,10 +51,22 @@ app.include_router(notifications.router)
 app.include_router(analytics.router)
 app.include_router(audit_logs.router)
 app.include_router(users.router)
+
+
 # Allow React frontend to communicate with FastAPI
+allowed_origins = [
+    "http://localhost:5173",
+    "https://share-space-mu.vercel.app",
+]
+
+# Add an optional frontend URL from environment variables
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
