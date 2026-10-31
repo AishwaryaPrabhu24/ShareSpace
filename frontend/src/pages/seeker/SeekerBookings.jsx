@@ -14,6 +14,8 @@ import {
   X,
   Eye,
   MessageSquare,
+  ShieldAlert,
+  Send,
 } from "lucide-react";
 import api from "../../services/api";
 
@@ -54,6 +56,16 @@ export default function SeekerBookings() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelBooking, setCancelBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+
+  // Incident reporting state
+  const [incidentBooking, setIncidentBooking] = useState(null);
+  const [incidentForm, setIncidentForm] = useState({
+    title: "",
+    description: "",
+    severity: "medium",
+  });
+  const [submittingIncident, setSubmittingIncident] = useState(false);
+  const [incidentError, setIncidentError] = useState("");
 
   const fetchBookings = async () => {
     try {
@@ -120,7 +132,10 @@ export default function SeekerBookings() {
         `/api/bookings/${cancelBooking.id}/cancel`
       );
 
-      setSuccess(`Booking #${cancelBooking.id} was cancelled successfully.`);
+      setSuccess(
+        `Booking #${cancelBooking.id} was cancelled successfully.`
+      );
+
       setCancelBooking(null);
       setSelectedBooking(null);
 
@@ -132,6 +147,88 @@ export default function SeekerBookings() {
       );
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Open incident form
+  const openIncidentForm = (booking) => {
+    setIncidentBooking(booking);
+    setIncidentForm({
+      title: "",
+      description: "",
+      severity: "medium",
+    });
+    setIncidentError("");
+    setError("");
+    setSuccess("");
+  };
+
+  // Close incident form
+  const closeIncidentForm = () => {
+    if (submittingIncident) return;
+
+    setIncidentBooking(null);
+    setIncidentForm({
+      title: "",
+      description: "",
+      severity: "medium",
+    });
+    setIncidentError("");
+  };
+
+  // Submit incident to backend
+  const handleIncidentSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!incidentBooking) return;
+
+    const title = incidentForm.title.trim();
+    const description = incidentForm.description.trim();
+
+    if (title.length < 3 || title.length > 150) {
+      setIncidentError(
+        "Incident title must contain between 3 and 150 characters."
+      );
+      return;
+    }
+
+    if (description.length < 10 || description.length > 2000) {
+      setIncidentError(
+        "Description must contain between 10 and 2000 characters."
+      );
+      return;
+    }
+
+    try {
+      setSubmittingIncident(true);
+      setIncidentError("");
+      setError("");
+      setSuccess("");
+
+      await api.post("/api/incidents/", {
+        booking_id: incidentBooking.id,
+        title,
+        description,
+        severity: incidentForm.severity,
+      });
+
+      setIncidentBooking(null);
+      setIncidentForm({
+        title: "",
+        description: "",
+        severity: "medium",
+      });
+
+      setSuccess(
+        `Incident reported successfully for Booking #${incidentBooking.id}.`
+      );
+    } catch (err) {
+      setIncidentError(
+        err.response?.data?.detail ||
+          "Unable to report the incident. Please try again."
+      );
+    } finally {
+      setSubmittingIncident(false);
     }
   };
 
@@ -222,6 +319,7 @@ export default function SeekerBookings() {
               size={18}
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
+
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -276,12 +374,15 @@ export default function SeekerBookings() {
       ) : filteredBookings.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
           <CalendarCheck size={30} className="mx-auto text-slate-300" />
+
           <h3 className="mt-4 font-semibold text-slate-800">
             No bookings found
           </h3>
+
           <p className="mt-1 text-sm text-slate-500">
             Your bookings will appear here when you make a resource request.
           </p>
+
           <button
             onClick={() => window.location.assign("/seeker/resources")}
             className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
@@ -342,6 +443,16 @@ export default function SeekerBookings() {
                       Details
                     </button>
 
+                    {booking.status === "approved" && (
+                      <button
+                        onClick={() => openIncidentForm(booking)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 hover:bg-orange-100"
+                      >
+                        <ShieldAlert size={16} />
+                        Report Incident
+                      </button>
+                    )}
+
                     {(booking.status === "pending" ||
                       booking.status === "approved") && (
                       <button
@@ -361,6 +472,7 @@ export default function SeekerBookings() {
                     label="Start"
                     value={formatDateTime(booking.start_time)}
                   />
+
                   <InfoItem
                     icon={Clock}
                     label="End"
@@ -374,6 +486,7 @@ export default function SeekerBookings() {
                       <MessageSquare size={14} />
                       Decision Remarks
                     </p>
+
                     <p className="mt-1 text-sm text-blue-800">
                       {booking.decision_remarks}
                     </p>
@@ -399,6 +512,7 @@ export default function SeekerBookings() {
               <h2 className="text-lg font-bold text-slate-900">
                 Booking Details #{selectedBooking.id}
               </h2>
+
               <button
                 onClick={() => setSelectedBooking(null)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
@@ -414,11 +528,191 @@ export default function SeekerBookings() {
               <Detail label="End Time" value={formatDateTime(selectedBooking.end_time)} />
               <Detail label="Status" value={selectedBooking.status} />
               <Detail label="Requested On" value={formatDateTime(selectedBooking.created_at)} />
+
               <Detail
                 label="Decision Remarks"
                 value={selectedBooking.decision_remarks || "No remarks provided"}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Incident Modal */}
+      {incidentBooking && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
+          onClick={closeIncidentForm}
+        >
+          <div
+            className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <div className="flex items-center gap-2 text-orange-600">
+                  <ShieldAlert size={20} />
+                  <span className="text-sm font-semibold">
+                    Incident Reporting
+                  </span>
+                </div>
+
+                <h2 className="mt-2 text-lg font-bold text-slate-900">
+                  Report an Incident
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Booking #{incidentBooking.id}
+                </p>
+              </div>
+
+              <button
+                onClick={closeIncidentForm}
+                disabled={submittingIncident}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleIncidentSubmit}
+              className="space-y-5 p-5"
+            >
+              {incidentError && (
+                <Feedback
+                  type="error"
+                  message={incidentError}
+                  onClose={() => setIncidentError("")}
+                />
+              )}
+
+              <div className="rounded-xl bg-blue-50 p-3">
+                <p className="text-xs font-semibold text-blue-700">
+                  Booking Reference
+                </p>
+
+                <p className="mt-1 text-sm font-medium text-blue-900">
+                  Booking #{incidentBooking.id} · Resource ID:{" "}
+                  {incidentBooking.resource_id}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Incident Title *
+                </label>
+
+                <input
+                  type="text"
+                  required
+                  minLength={3}
+                  maxLength={150}
+                  value={incidentForm.title}
+                  onChange={(e) =>
+                    setIncidentForm((prev) => ({
+                      ...prev,
+                      title: e.target.value,
+                    }))
+                  }
+                  placeholder="Example: Equipment damaged during usage"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                />
+
+                <p className="mt-1 text-xs text-slate-400">
+                  3–150 characters
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Description *
+                </label>
+
+                <textarea
+                  required
+                  minLength={10}
+                  maxLength={2000}
+                  rows={4}
+                  value={incidentForm.description}
+                  onChange={(e) =>
+                    setIncidentForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                  placeholder="Describe what happened, when it happened, and any relevant details..."
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                />
+
+                <p className="mt-1 text-right text-xs text-slate-400">
+                  {incidentForm.description.length}/2000 characters
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Severity *
+                </label>
+
+                <select
+                  value={incidentForm.severity}
+                  onChange={(e) =>
+                    setIncidentForm((prev) => ({
+                      ...prev,
+                      severity: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+
+              <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+                <p className="flex items-center gap-2 text-xs font-semibold text-orange-800">
+                  <AlertCircle size={15} />
+                  Important
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-orange-700">
+                  Your incident report will be associated with this booking
+                  and made available to the relevant resource owner.
+                </p>
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={closeIncidentForm}
+                  disabled={submittingIncident}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submittingIncident}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submittingIncident ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      Submit Incident
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -479,6 +773,7 @@ function StatCard({ title, value, icon: Icon, color }) {
           <p className="text-sm font-medium text-slate-500">{title}</p>
           <p className="mt-3 text-3xl font-bold text-slate-900">{value}</p>
         </div>
+
         <div className={`rounded-xl p-3 ${styles[color]}`}>
           <Icon size={22} />
         </div>
@@ -491,6 +786,7 @@ function InfoItem({ icon: Icon, label, value }) {
   return (
     <div className="flex items-start gap-2 text-sm">
       <Icon size={16} className="mt-0.5 shrink-0 text-slate-400" />
+
       <div>
         <p className="text-xs text-slate-400">{label}</p>
         <p className="mt-0.5 font-medium text-slate-700">{value}</p>
@@ -521,8 +817,14 @@ function Feedback({ type, message, onClose }) {
           : "border-emerald-200 bg-emerald-50 text-emerald-700"
       }`}
     >
-      {isError ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+      {isError ? (
+        <AlertCircle size={18} />
+      ) : (
+        <CheckCircle2 size={18} />
+      )}
+
       <p className="flex-1">{message}</p>
+
       <button onClick={onClose} aria-label="Dismiss message">
         <X size={17} />
       </button>
