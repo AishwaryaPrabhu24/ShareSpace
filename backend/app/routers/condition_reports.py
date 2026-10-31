@@ -16,6 +16,7 @@ from app.schemas.condition_report import (
 )
 from app.permissions import require_roles
 
+
 router = APIRouter(
     prefix="/api/condition-reports",
     tags=["Condition Reports"]
@@ -36,8 +37,6 @@ def check_in(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("seeker"))
 ):
-
-    # Find booking
     booking = db.get(Booking, booking_id)
 
     if booking is None:
@@ -46,21 +45,19 @@ def check_in(
             detail="Booking not found"
         )
 
-    # Verify booking ownership
     if booking.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only check in for your own bookings"
         )
 
-    # Check booking status
     if booking.status != "approved":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only approved bookings can be checked in"
         )
 
-    # Check booking time
+    # Check whether the current time is within the booking period.
     now = datetime.now(timezone.utc)
 
     start_time = booking.start_time
@@ -78,7 +75,7 @@ def check_in(
             detail="Check-in is allowed only during the booking period"
         )
 
-    # Prevent duplicate check-in
+    # Prevent duplicate check-in.
     existing_report = db.scalar(
         select(ConditionReport).where(
             ConditionReport.booking_id == booking_id,
@@ -92,7 +89,6 @@ def check_in(
             detail="Check-in has already been completed"
         )
 
-    # Create check-in report
     report = ConditionReport(
         booking_id=booking_id,
         reported_by=current_user.id,
@@ -109,7 +105,8 @@ def check_in(
 
 
 # 2. Check-out
-# Only the Seeker who checked in can check out.
+# Only the Seeker who owns the booking can check out.
+# Check-in must be completed first.
 
 @router.post(
     "/{booking_id}/check-out",
@@ -122,8 +119,6 @@ def check_out(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("seeker"))
 ):
-
-    # Find booking
     booking = db.get(Booking, booking_id)
 
     if booking is None:
@@ -132,21 +127,19 @@ def check_out(
             detail="Booking not found"
         )
 
-    # Verify booking ownership
     if booking.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only check out your own bookings"
+            detail="You can only check out for your own bookings"
         )
 
-    # Check booking status
     if booking.status != "approved":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only approved bookings can be checked out"
         )
 
-    # Check whether check-in is completed
+    # Check whether check-in is completed.
     check_in_report = db.scalar(
         select(ConditionReport).where(
             ConditionReport.booking_id == booking_id,
@@ -160,7 +153,7 @@ def check_out(
             detail="Please complete check-in before check-out"
         )
 
-    # Prevent duplicate check-out
+    # Prevent duplicate check-out.
     existing_report = db.scalar(
         select(ConditionReport).where(
             ConditionReport.booking_id == booking_id,
@@ -174,7 +167,6 @@ def check_out(
             detail="Check-out has already been completed"
         )
 
-    # Create check-out report
     report = ConditionReport(
         booking_id=booking_id,
         reported_by=current_user.id,
@@ -188,27 +180,28 @@ def check_out(
     db.refresh(report)
 
     return report
-# 3. Get condition reports for resources owned by the current Owner
+
+
+# 3. Get condition reports submitted by the current Seeker.
 
 @router.get(
-    "/owner",
+    "/my",
     response_model=list[ConditionReportResponse]
 )
-def get_owner_condition_reports(
+def get_my_condition_reports(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("owner"))
+    current_user: User = Depends(require_roles("seeker"))
 ):
     reports = db.scalars(
         select(ConditionReport)
-        .join(Booking, ConditionReport.booking_id == Booking.id)
-        .join(Resource, Booking.resource_id == Resource.id)
-        .where(Resource.owner_id == current_user.id)
+        .where(ConditionReport.reported_by == current_user.id)
         .order_by(ConditionReport.created_at.desc())
     ).all()
 
     return reports
 
-# 3. Get condition reports for resources owned by the current Owner
+
+# 4. Get condition reports for resources owned by the current Owner.
 
 @router.get(
     "/owner",
@@ -220,8 +213,14 @@ def get_owner_condition_reports(
 ):
     reports = db.scalars(
         select(ConditionReport)
-        .join(Booking, ConditionReport.booking_id == Booking.id)
-        .join(Resource, Booking.resource_id == Resource.id)
+        .join(
+            Booking,
+            ConditionReport.booking_id == Booking.id
+        )
+        .join(
+            Resource,
+            Booking.resource_id == Resource.id
+        )
         .where(Resource.owner_id == current_user.id)
         .order_by(ConditionReport.created_at.desc())
     ).all()
